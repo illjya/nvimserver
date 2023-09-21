@@ -1,0 +1,30 @@
+#!/bin/sh
+SOCKET_PATH=/tmp/nvimsocket
+
+# https://stackoverflow.com/a/3588480/12948018
+function top_level_parent_pid {
+    # Look up the parent of the given PID.
+    pid=${1:-$$}
+    stat=($(</proc/${pid}/stat))
+    ppid=${stat[3]}
+
+    # /sbin/init always has a PID of 1, so if you reach that, the current PID is
+    # the top-level parent. Otherwise, keep looking.
+    if [[ ${ppid} -eq 1 ]] ; then
+        echo ${pid}
+    else
+        top_level_parent_pid ${ppid}
+    fi
+}
+
+if [ -e "$SOCKET_PATH" ]; then
+    nvim --server ${SOCKET_PATH} --remote-tab "$@"
+
+    first_nvim_pid=$(ps aux | grep "nvim --listen ${SOCKET_PATH}" | head -n 1 | awk '{print $2}')
+    top_pid=$(top_level_parent_pid ${first_nvim_pid})
+    window_id=$(xdotool search --pid ${top_pid})
+
+    xdotool windowactivate ${window_id}
+else
+    ${TERM} -e nvim --listen ${SOCKET_PATH} -p "$@" &
+fi
